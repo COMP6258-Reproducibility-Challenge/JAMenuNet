@@ -42,8 +42,11 @@ class TransformerEncoderLayer(name: String,
         isTraining: Operand<Boolean>,
         numberOfLosses: Operand<Float>?
     ): Operand<Float> {
+        // input shape = [10, 6]
         var attentionOutput = this.mha.build(tf, listOf(input, input, input), isTraining, numberOfLosses)
+        // [10, 9]
         attentionOutput = this.dropout1.build(tf, attentionOutput, isTraining, numberOfLosses)
+        // [10, 9]
         val out1 = this.layerNorm1.build(tf, tf.math.add(input, attentionOutput), isTraining, numberOfLosses)
 
         var feedForwardOutput = this.feedForward2.build(tf, feedForward1.build(tf, out1, isTraining, numberOfLosses), isTraining, numberOfLosses)

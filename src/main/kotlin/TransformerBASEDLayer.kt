@@ -41,12 +41,19 @@ class TransformerBASEDLayer(
     }
 
 
+    private val conv2D =
+        Conv2D(filters = feedForwardDimension, kernelSize = intArrayOf(1, 1), activation = Activations.Relu)
+
+    private val conv2D1 = Conv2D(filters = dOut, kernelSize = intArrayOf(1, 1), activation = Activations.Linear)
+
     override fun build(
         tf: Ops, input: Operand<Float>, isTraining: Operand<Boolean>, numberOfLosses: Operand<Float>?
     ): Operand<Float> {
-        val numberOfBatches = input.asOutput().shape().size(0)
-        val batches = tf.unstack(input, numberOfBatches, Unstack.axis(0L)).map {
-            val rows = tf.unstack(it, numberOfBidders + 1, Unstack.axis(1L)) // (numItems) x (dOut)
+        val batchSize = if (input.asOutput().shape().size(0).toInt() == -1) this.batchSize else input.asOutput().shape().size(0)
+
+        println(input.asOutput().shape())
+        val batches = tf.unstack(input, batchSize, Unstack.axis(0L)).map {
+            val rows = tf.unstack(it, numberOfBidders + 1, Unstack.axis(0L)) // (numItems) x (dOut)
                 .map { row -> rowTransformer.build(tf, row, isTraining, numberOfLosses) }
 
             val columns = tf.unstack(it, numberOfItems, Unstack.axis(2L)) // (numBids + 1) x (dOut)
@@ -62,11 +69,7 @@ class TransformerBASEDLayer(
         } // (numbatches) x (numbids+1) x (numItems) x (concat)
 
         val stackedBatches = tf.stack(batches, Stack.axis(0L))
-
-        val interim =
-            Conv2D(filters = feedForwardDimension, kernelSize = intArrayOf(1, 1), activation = Activations.Relu)
-                .build(tf, stackedBatches, isTraining, numberOfLosses)
-        return Conv2D(filters = dOut, kernelSize = intArrayOf(1, 1), activation = Activations.Linear)
-            .build(tf, interim, isTraining, numberOfLosses)
+        val interim = conv2D.build(tf, stackedBatches, isTraining, numberOfLosses)
+        return conv2D1.build(tf, interim, isTraining, numberOfLosses)
     }
 }

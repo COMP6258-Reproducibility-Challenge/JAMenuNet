@@ -3,7 +3,10 @@ package org.example
 import org.jetbrains.kotlinx.dl.api.core.activation.Activations
 import org.jetbrains.kotlinx.dl.api.core.layer.Layer
 import org.jetbrains.kotlinx.dl.api.core.layer.activation.Softmax
+import org.jetbrains.kotlinx.dl.api.core.layer.convolutional.Conv2D
 import org.jetbrains.kotlinx.dl.api.core.layer.core.Dense
+import org.jetbrains.kotlinx.dl.api.core.layer.initialize
+import org.tensorflow.Graph
 import org.tensorflow.Operand
 import org.tensorflow.op.Ops
 import org.tensorflow.op.core.Gather
@@ -18,8 +21,9 @@ class BigLayer(
     private val numberOfItems: Long,
     private val menuSize: Int,
     override val hasActivation: Boolean = false
-
 ) : Layer(name) {
+
+    private var training: Boolean = true
 
     override fun build(
         tf: Ops,
@@ -27,7 +31,6 @@ class BigLayer(
         isTraining: Operand<Boolean>,
         numberOfLosses: Operand<Float>?
     ): Operand<Float> {
-        val training = isTraining.asOutput().tensor().booleanValue()
 
         var (menu, weights, boosts) = tf.splitV(
             input[0],
@@ -157,6 +160,20 @@ class BigLayer(
         isTraining: Operand<Boolean>,
         numberOfLosses: Operand<Float>?
     ): Operand<Float> {
-        throw UnsupportedOperationException("BigLayer requires list of inputs")
+        val (representation, bids) = tf.splitV(
+            input,
+            tf.constant(intArrayOf((dx + dy).toInt(), 1)),
+            tf.constant(3),
+            2L
+        ).toList()
+
+        val encodedRepresentation = encode(tf, representation, isTraining, numberOfLosses)
+        println(encodedRepresentation.asOutput().shape())
+        
+        return calculatePayment(tf, listOf(encodedRepresentation, bids), isTraining, numberOfLosses)
+    }
+
+    fun isTraining(b: Boolean) {
+        this.training = b
     }
 }
