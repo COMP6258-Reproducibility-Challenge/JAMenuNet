@@ -8,6 +8,7 @@ import org.jetbrains.kotlinx.dl.api.core.layer.core.Dense
 import org.jetbrains.kotlinx.dl.api.core.layer.initialize
 import org.tensorflow.Graph
 import org.tensorflow.Operand
+import org.tensorflow.Session
 import org.tensorflow.op.Ops
 import org.tensorflow.op.core.Gather
 import org.tensorflow.op.core.Squeeze
@@ -20,12 +21,71 @@ class BigLayer(
     private val numberOfBidders: Long,
     private val numberOfItems: Long,
     private val menuSize: Int,
+    private val dx: Long,
+    private val dy: Long,
+    private val interimD: Int,
+    private val d: Int,
+    private val numberOfInteractionModules: Int,
+    private val dHidden: Long,
+    private val numberOfHeads: Long,
+    private val dOut: Long,
+    private val batchSize: Long,
     override val hasActivation: Boolean = false
 ) : Layer(name) {
 
     private var training: Boolean = true
 
-    override fun build(
+    private val conv2D = Conv2D(
+        filters = interimD,
+        kernelSize = intArrayOf(1, 1),
+        activation = Activations.Relu
+    )
+
+    private val conv2D1 = Conv2D(
+        filters = d,
+        kernelSize = intArrayOf(1, 1),
+        activation = Activations.Linear
+    )
+
+    private val transformerBASEDLayers = arrayOf(d)
+        .asSequence()
+        .plus(Array(numberOfInteractionModules - 1) { dHidden })
+        .plus(arrayOf(dOut))
+        .toList()
+        .zipWithNext()
+        .map {
+            TransformerBASEDLayer(
+                numberOfHeads = numberOfHeads.toInt(),
+                dModel = it.first.toInt(),
+                feedForwardDimension = dHidden.toInt(),
+                dOut = it.second.toInt(),
+                numberOfBidders = numberOfBidders,
+                numberOfItems = numberOfItems,
+                batchSize = this.batchSize
+            )
+        }
+
+    private fun encode(
+        tf: Ops,
+        input: Operand<Float>,
+        isTraining: Operand<Boolean>,
+        numberOfLosses: Operand<Float>?
+    ): Operand<Float> {
+
+        val conv1 = conv2D.build(tf, input, isTraining, numberOfLosses)
+
+        val conv2 = conv2D1.build(tf, conv1, isTraining, numberOfLosses)
+        conv2D.initialize(Session(Graph()))
+        conv2D1.initialize(Session(Graph()))
+        val transformLayer = transformerBASEDLayers
+            .fold(conv2) { acc, layer ->
+                layer.build(tf, acc, isTraining, numberOfLosses)
+            }
+
+        return transformLayer
+    }
+
+    private fun calculatePayment(
         tf: Ops,
         input: List<Operand<Float>>, // inputs[0] should be in format (nBatches) x (nBidders + 1) x (nItems) x (2 * menuSize+1)
         isTraining: Operand<Boolean>,
@@ -38,9 +98,10 @@ class BigLayer(
             tf.constant(3),
             3L
         ).toList()
+        println(menu.asOutput().shape())
         menu = tf.stack(tf.unstack(menu, numberOfItems, Unstack.axis(2L)).map { itemInfo ->
             tf.stack(tf.unstack(itemInfo, menuSize.toLong(), Unstack.axis(2L)).map {
-                tf.nn.softmax(tf.math.mul(menu, tf.constant(softmaxTemp)))
+                tf.nn.softmax(tf.math.mul(it, tf.constant(softmaxTemp)))
             }, Stack.axis(2L))
         }, Stack.axis(2L))
         menu = tf.linalg.transpose(
@@ -57,6 +118,7 @@ class BigLayer(
         boosts = Dense(outputSize = menuSize, activation = Activations.Linear).build(tf, boosts, isTraining, numberOfLosses) // (batchSize) x (menuSize)
 
         var bids = input[1] // (batchSize) x (nBidders) x (nItems)
+        bids = tf.squeeze(bids)
         bids = tf.expandDims(bids, tf.constant(1L)) // (batchSize) x 1 x (nBidders) x (nItems)
 
         return if (training) trainingCalc(tf, menu, weights, boosts, bids)
@@ -72,7 +134,7 @@ class BigLayer(
         val chosenAllocation = tf.nn.softmax(tf.math.mul(boostedWelfare, tf.constant(softmaxTemp))) // (batchSize) x (menuSize)
         val expectedWelfarePerBidder = tf.sum(tf.math.mul(welfarePerBidder, tf.expandDims(chosenAllocation, tf.constant(-1L))), tf.constant(1L)) // (batchSize) x (nBidders)
 
-        val batchSize = menu.asOutput().shape().size(0)
+        val batchSize = if (menu.asOutput().shape().size(0).toInt() == -1) this.batchSize else menu.asOutput().shape().size(0)
 
         var mask: Operand<Float> = tf.oneHot(
             tf.constant((0..<numberOfBidders).toList().toTypedArray().toLongArray()),
@@ -120,7 +182,7 @@ class BigLayer(
 //        val chosenAllocation = tf.gather(menu, argMaxIndex, tf.constant(1L))
         val expectedWelfarePerBidder = tf.gather(welfarePerBidder, chosenAllocationIndex, tf.constant(1L), Gather.batchDims(1L)) // (batchSize) x (nBidders)
 
-        val batchSize = menu.asOutput().shape().size(0)
+        val batchSize = if (menu.asOutput().shape().size(0).toInt() == -1) this.batchSize else menu.asOutput().shape().size(0)
 
         var mask: Operand<Float> = tf.oneHot(
             tf.constant((0..<numberOfBidders).toList().toTypedArray().toLongArray()),
@@ -156,7 +218,7 @@ class BigLayer(
 
     override fun build(
         tf: Ops,
-        input: Operand<Float>,
+        input: Operand<Float>, // (batchSize) x (nBidders) x (nItems) x (dx + dy + 1)
         isTraining: Operand<Boolean>,
         numberOfLosses: Operand<Float>?
     ): Operand<Float> {

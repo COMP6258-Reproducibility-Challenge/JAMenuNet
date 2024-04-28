@@ -15,6 +15,7 @@ class TransformerBASEDLayer(
     private val dOut: Int, // d_out in the code
     private val numberOfBidders: Long,
     private val numberOfItems: Long,
+    private val batchSize: Long,
     name: String = "",
     override val hasActivation: Boolean = false
 ) : Layer(name) {
@@ -55,15 +56,17 @@ class TransformerBASEDLayer(
         val batches = tf.unstack(input, batchSize, Unstack.axis(0L)).map {
             val rows = tf.unstack(it, numberOfBidders + 1, Unstack.axis(0L)) // (numItems) x (dOut)
                 .map { row -> rowTransformer.build(tf, row, isTraining, numberOfLosses) }
+                .map { row -> tf.unstack(row, numberOfItems, Unstack.axis(0L)).toList()  }
 
-            val columns = tf.unstack(it, numberOfItems, Unstack.axis(2L)) // (numBids + 1) x (dOut)
+            val columns = tf.unstack(it, numberOfItems, Unstack.axis(1L)) // (numBids + 1) x (dOut)
                 .map { column -> columnTransformer.build(tf, column, isTraining, numberOfLosses) }
+                .map { column -> tf.unstack(column, numberOfBidders + 1, Unstack.axis(0L)).toList() }
 
-            val globalMean = tf.math.mean(input, tf.constant(intArrayOf(0, 1)))
+            val globalMean = tf.math.mean(it, tf.constant(intArrayOf(0, 1)))
 
             tf.stack((1..numberOfBidders + 1).map { row ->
                 tf.stack((1..numberOfItems).map { column ->
-                    tf.concat(listOf(rows[row.toInt()], columns[column.toInt()], globalMean), tf.constant(-1L))
+                    tf.concat(listOf(rows[row.toInt() - 1][column.toInt() - 1], columns[column.toInt() - 1][row.toInt() - 1], globalMean), tf.constant(0L))
                 }, Stack.axis(0L))
             }, Stack.axis(0L)) // (numbids+1) x (numItems) x (concat)
         } // (numbatches) x (numbids+1) x (numItems) x (concat)

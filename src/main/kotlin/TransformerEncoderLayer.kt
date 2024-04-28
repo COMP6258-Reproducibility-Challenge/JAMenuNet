@@ -168,9 +168,9 @@ class TransformerEncoderLayer(name: String,
            throw OperationNotSupportedException("Use the build with list input")
         }
 
-        fun splitHeads(tf: Ops, input: Operand<Float>, batchSize: Long): Operand<Float> {
-            val reshapedInput = tf.reshape(input, tf.constant(longArrayOf(batchSize, -1, this.numberOfHeads.toLong(), this.depth.toLong())))
-            return tf.linalg.transpose(reshapedInput, tf.constant(intArrayOf(0, 2, 1, 3)))
+        fun splitHeads(tf: Ops, input: Operand<Float>): Operand<Float> {
+            val reshapedInput = tf.reshape(input, tf.constant(longArrayOf(-1, this.numberOfHeads.toLong(), this.depth.toLong())))
+            return tf.linalg.transpose(reshapedInput, tf.constant(intArrayOf(1, 0, 2)))
         }
 
         // We don't need the mask
@@ -178,12 +178,13 @@ class TransformerEncoderLayer(name: String,
                                       query: Operand<Float>,
                                       key: Operand<Float>,
                                       value: Operand<Float>): Pair<Operand<Float>, Operand<Float>> {
-            val matMulQueryKey = tf.linalg.matMul(query, key, MatMul.transposeB(true))
+            val transposeKey = tf.linalg.transpose(key, tf.constant(intArrayOf(0, 2, 1)))
+            val matMulQueryKey = tf.linalg.batchMatMul(query, transposeKey)
             val dk = key.asOutput().shape().size(key.asOutput().shape().numDimensions() - 1).toFloat()
             val scaledAttentionLogits: Operand<Float> = tf.math.div(matMulQueryKey, tf.constant(dk))
 
             val attentionWeights = Softmax().forward(tf, scaledAttentionLogits)
-            val output = tf.linalg.matMul(attentionWeights, value)
+            val output = tf.linalg.batchMatMul(attentionWeights, value)
 
             return Pair(output, attentionWeights)
         }
@@ -200,19 +201,17 @@ class TransformerEncoderLayer(name: String,
             var key = input[1]
             var value = input[2]
 
-            val batchSize = query.asOutput().shape().size(0)
-
             query = this.queryDense.build(tf, query, isTraining, numberOfLosses)
             key = this.keyDense.build(tf, key, isTraining, numberOfLosses)
             value = this.valueDense.build(tf, value, isTraining, numberOfLosses)
 
-            query = splitHeads(tf, query, batchSize)
-            key = splitHeads(tf, key, batchSize)
-            value = splitHeads(tf, value, batchSize)
+            query = splitHeads(tf, query)
+            key = splitHeads(tf, key)
+            value = splitHeads(tf, value)
 
             val (scaledAttention, _) = scaledDotProductAttention(tf, query, key, value)
-            val transposedAttention = tf.linalg.transpose(scaledAttention, tf.constant(intArrayOf(0, 2, 1, 3)))
-            val concatAttention = tf.reshape(transposedAttention, tf.constant(longArrayOf(batchSize, -1, this.dModel.toLong())))
+            val transposedAttention = tf.linalg.transpose(scaledAttention, tf.constant(intArrayOf(1, 0, 2)))
+            val concatAttention = tf.reshape(transposedAttention, tf.constant(longArrayOf(-1, this.dModel.toLong())))
             val output = this.dense.build(tf, concatAttention, isTraining, numberOfLosses)
 
             return output // We seem not to need the attentionWeights

@@ -12,6 +12,7 @@ import org.jetbrains.kotlinx.dl.api.core.optimizer.ClipGradientByValue
 import org.jetbrains.kotlinx.dl.impl.summary.logSummary
 import org.tensorflow.Graph
 import org.tensorflow.Operand
+import org.tensorflow.Session
 import org.tensorflow.op.Ops
 import kotlin.math.exp
 import kotlin.random.Random
@@ -25,15 +26,14 @@ private const val dx = 5L
 private const val dy = dx
 private const val interimD = 7
 private const val d = 6
-private const val numberOfInteractionModules = 7
+private const val numberOfInteractionModules = 2
 
-private const val dInp = 9L
-private const val dHidden = 6L
-private const val numberOfHeads = 3L
-private const val dOut = 5L
+private const val dHidden = 5L
+private const val numberOfHeads = 1L
+private const val menuSize = 1
+private const val dOut = 2L * menuSize.toLong() + 1L
 
 private const val temp = 5.0f
-private const val menuSize = 5
 
 val input = Input(
     numberOfBidders + 1,
