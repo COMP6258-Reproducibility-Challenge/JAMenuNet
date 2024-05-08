@@ -35,11 +35,49 @@ private const val dOut = 2L * menuSize.toLong() + 1L
 
 private const val temp = 5.0f
 
+private val transformerBASEDLayers = arrayOf(d)
+    .asSequence()
+    .plus(Array(numberOfInteractionModules - 1) { dHidden })
+    .plus(arrayOf(dOut))
+    .toList()
+    .zipWithNext()
+    .map {
+        TransformerBASEDLayer(
+            numberOfHeads = numberOfHeads.toInt(),
+            dModel = it.first.toInt(),
+            feedForwardDimension = dHidden.toInt(),
+            dOut = it.second.toInt(),
+            numberOfBidders = numberOfBidders,
+            numberOfItems = numberOfItems,
+            batchSize = TRAINING_BATCH_SIZE
+        )
+    }
+
 val input = Input(
     numberOfBidders + 1,
     numberOfItems,
     dx + dy + 1
 )
+
+val representationsLayer = GetRepresentationsLayer(dx = dx, dy = dy)(input)
+val bidsLayer = GetBidsLayer(dx = dx, dy = dy)(input)
+
+val conv1 = Conv2D(
+    filters = interimD,
+    kernelSize = intArrayOf(1, 1),
+    activation = Activations.Relu
+)(representationsLayer)
+
+val conv2 = Conv2D(
+    filters = d,
+    kernelSize = intArrayOf(1, 1),
+    activation = Activations.Linear
+)(conv1)
+
+val transformLayer = transformerBASEDLayers
+    .fold(conv2) { acc, layer ->
+        layer(acc)
+    }
 
 private val layer = BigLayer(
     softmaxTemp = temp,
@@ -58,7 +96,7 @@ private val layer = BigLayer(
 )
 
 val outputs =
-    layer(input)
+    layer(transformLayer, bidsLayer)
 
 val model = Functional.fromOutput(outputs)
 

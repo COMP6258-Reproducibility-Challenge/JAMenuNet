@@ -1,7 +1,9 @@
 package org.example
 
 import org.jetbrains.kotlinx.dl.api.core.activation.Activations
+import org.jetbrains.kotlinx.dl.api.core.layer.KVariable
 import org.jetbrains.kotlinx.dl.api.core.layer.Layer
+import org.jetbrains.kotlinx.dl.api.core.layer.ParametrizedLayer
 import org.jetbrains.kotlinx.dl.api.core.layer.convolutional.Conv2D
 import org.tensorflow.Operand
 import org.tensorflow.op.Ops

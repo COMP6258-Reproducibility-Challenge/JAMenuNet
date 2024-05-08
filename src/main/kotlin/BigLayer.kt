@@ -14,6 +14,7 @@ import org.tensorflow.op.core.Gather
 import org.tensorflow.op.core.Squeeze
 import org.tensorflow.op.core.Stack
 import org.tensorflow.op.core.Unstack
+import javax.naming.OperationNotSupportedException
 
 class BigLayer(
     name: String = "",
@@ -35,56 +36,6 @@ class BigLayer(
 
     private var training: Boolean = true
 
-    private val conv2D = Conv2D(
-        filters = interimD,
-        kernelSize = intArrayOf(1, 1),
-        activation = Activations.Relu
-    )
-
-    private val conv2D1 = Conv2D(
-        filters = d,
-        kernelSize = intArrayOf(1, 1),
-        activation = Activations.Linear
-    )
-
-    private val transformerBASEDLayers = arrayOf(d)
-        .asSequence()
-        .plus(Array(numberOfInteractionModules - 1) { dHidden })
-        .plus(arrayOf(dOut))
-        .toList()
-        .zipWithNext()
-        .map {
-            TransformerBASEDLayer(
-                numberOfHeads = numberOfHeads.toInt(),
-                dModel = it.first.toInt(),
-                feedForwardDimension = dHidden.toInt(),
-                dOut = it.second.toInt(),
-                numberOfBidders = numberOfBidders,
-                numberOfItems = numberOfItems,
-                batchSize = this.batchSize
-            )
-        }
-
-    private fun encode(
-        tf: Ops,
-        input: Operand<Float>,
-        isTraining: Operand<Boolean>,
-        numberOfLosses: Operand<Float>?
-    ): Operand<Float> {
-
-        val conv1 = conv2D.build(tf, input, isTraining, numberOfLosses)
-
-        val conv2 = conv2D1.build(tf, conv1, isTraining, numberOfLosses)
-        conv2D.initialize(Session(Graph()))
-        conv2D1.initialize(Session(Graph()))
-        val transformLayer = transformerBASEDLayers
-            .fold(conv2) { acc, layer ->
-                layer.build(tf, acc, isTraining, numberOfLosses)
-            }
-
-        return transformLayer
-    }
-
     private fun calculatePayment(
         tf: Ops,
         input: List<Operand<Float>>, // inputs[0] should be in format (nBatches) x (nBidders + 1) x (nItems) x (2 * menuSize+1)
@@ -98,7 +49,7 @@ class BigLayer(
             tf.constant(3),
             3L
         ).toList()
-        println(menu.asOutput().shape())
+        println("Menu: ${menu.asOutput().shape()}")
         menu = tf.stack(tf.unstack(menu, numberOfItems, Unstack.axis(2L)).map { itemInfo ->
             tf.stack(tf.unstack(itemInfo, menuSize.toLong(), Unstack.axis(2L)).map {
                 tf.nn.softmax(tf.math.mul(it, tf.constant(softmaxTemp)))
@@ -218,21 +169,22 @@ class BigLayer(
 
     override fun build(
         tf: Ops,
+        input: List<Operand<Float>>,
+        isTraining: Operand<Boolean>,
+        numberOfLosses: Operand<Float>?
+    ): Operand<Float> {
+        val (representation, bids) = input
+
+        return calculatePayment(tf, listOf(representation, bids), isTraining, numberOfLosses)
+    }
+
+    override fun build(
+        tf: Ops,
         input: Operand<Float>, // (batchSize) x (nBidders) x (nItems) x (dx + dy + 1)
         isTraining: Operand<Boolean>,
         numberOfLosses: Operand<Float>?
     ): Operand<Float> {
-        val (representation, bids) = tf.splitV(
-            input,
-            tf.constant(intArrayOf((dx + dy).toInt(), 1)),
-            tf.constant(3),
-            2L
-        ).toList()
-
-        val encodedRepresentation = encode(tf, representation, isTraining, numberOfLosses)
-        println(encodedRepresentation.asOutput().shape())
-        
-        return calculatePayment(tf, listOf(encodedRepresentation, bids), isTraining, numberOfLosses)
+        throw OperationNotSupportedException("Use the build with list input")
     }
 
     fun isTraining(b: Boolean) {

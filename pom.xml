@@ -88,11 +88,11 @@
             <artifactId>kotlin-deeplearning-tensorflow</artifactId>
             <version>0.5.2</version>
         </dependency>
-        <dependency>
-            <groupId>org.tensorflow</groupId>
-            <artifactId>tensorflow-core-platform</artifactId>
-            <version>0.5.0</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.tensorflow</groupId>-->
+<!--            <artifactId>tensorflow-core-platform</artifactId>-->
+<!--            <version>0.5.0</version>-->
+<!--        </dependency>-->
 
     </dependencies>
 
