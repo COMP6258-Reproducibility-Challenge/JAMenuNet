@@ -115,13 +115,9 @@ class BigLayer(keras.layers.Layer):
             batch_mask = tf.stack(batch_mask, axis=0)
             repeat_mask.append(batch_mask)
         mask = tf.stack(repeat_mask, axis=0)
-        tf.print(mask)
 
         repeat_boosts = tf.tile(tf.expand_dims(boosts, axis=0), [self.n_bidders, 1, 1])
 
-        masked_welfare_per_bidder = tf.multiply(
-            tf.tile(tf.expand_dims(expected_welfare_per_bidder, axis=0), [self.n_bidders, 1, 1]),
-            mask)
         masked_welfare = tf.multiply(
             tf.tile(tf.expand_dims(welfare_per_bidder, axis=0), [self.n_bidders, 1, 1, 1]),
             tf.expand_dims(mask, axis=2))
@@ -137,7 +133,11 @@ class BigLayer(keras.layers.Layer):
         regular_boosts = tf.squeeze(regular_boosts, axis=2)
 
         sum1 = tf.add(masked_expected_welfare, masked_boosts)
-        sum2 = tf.add(tf.reduce_sum(masked_welfare_per_bidder, axis=2), regular_boosts)
+        sum2 = []
+        for i in range(self.n_bidders):
+            sum2.append(tf.subtract(tf.reduce_sum(expected_welfare_per_bidder, axis=1), expected_welfare_per_bidder[:, i]))
+        tf.stack(sum2, axis=0)
+        sum2 = tf.add(sum2, regular_boosts)
         payments = tf.multiply(tf.divide(1.0, tf.transpose(weights, [1, 0])), tf.subtract(sum1, sum2))
 
         return payments
