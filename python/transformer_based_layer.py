@@ -4,11 +4,12 @@ import tensorflow as tf
 
 
 class TransformerBasedLayer(keras.layers.Layer):
-    def __init__(self, n_heads, d_model, d_feed_forward, d_out, n_bidders, n_items):
+    def __init__(self, n_heads, d_model, d_feed_forward, d_out, n_bidders, n_items, batch_size):
         super(TransformerBasedLayer, self).__init__()
         self.n_bidders = n_bidders + 1
         self.n_items = n_items
         self.d_model = d_model
+        self.batch_size = batch_size
         self.rowTransformer = keras_nlp.layers.TransformerEncoder(d_feed_forward, n_heads)
         self.columnTransformer = keras_nlp.layers.TransformerEncoder(d_feed_forward, n_heads)
         self.conv1 = keras.layers.Conv2D(d_feed_forward, (1, 1), activation=keras.activations.relu)
@@ -16,7 +17,7 @@ class TransformerBasedLayer(keras.layers.Layer):
 
     def call(self, inputs):
 
-        batch_size = inputs.shape[0]
+        batch_size = self.batch_size
 
         rows = tf.reshape(inputs, (-1, self.n_items, self.d_model))
         rows = self.rowTransformer(rows)

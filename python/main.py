@@ -1,8 +1,8 @@
 import keras
-import numpy as np
 from keras import Input, Model
 from keras.src.layers import Conv2D
 import tensorflow as tf
+from tqdm.keras import TqdmCallback
 
 from big_layer import BigLayer
 from transformer_based_layer import TransformerBasedLayer
@@ -54,9 +54,9 @@ def generate_values(samples, n_bidders, n_items, dx, dy):
 
 
 def main():
-    batch_size = 2048
-    epochs = 2000  # train_steps
-    samples = 32768  # train_sample_num = eval_sample_num
+    batch_size = 50 #2048  # Make sure this is a divisor of samples
+    epochs = 2  # train_steps
+    samples = 100 #32768  # train_sample_num = eval_sample_num
     seed = 3
 
     start_lr = 1e-8  # This is static in the code
@@ -84,11 +84,11 @@ def main():
     transformer_layers = []
     for i in range(n_interaction):
         if i == 0:
-            transformer_layers.append(TransformerBasedLayer(n_heads, d, d_hidden, d_hidden, n_bidders, n_items))
+            transformer_layers.append(TransformerBasedLayer(n_heads, d, d_hidden, d_hidden, n_bidders, n_items, batch_size))
         elif i == n_interaction - 1:
-            transformer_layers.append(TransformerBasedLayer(n_heads, d_hidden, d_hidden, d_out, n_bidders, n_items))
+            transformer_layers.append(TransformerBasedLayer(n_heads, d_hidden, d_hidden, d_out, n_bidders, n_items, batch_size))
         else:
-            transformer_layers.append(TransformerBasedLayer(n_heads, d_hidden, d_hidden, d_hidden, n_bidders, n_items))
+            transformer_layers.append(TransformerBasedLayer(n_heads, d_hidden, d_hidden, d_hidden, n_bidders, n_items, batch_size))
 
     representations_input = Input(shape=(n_bidders + 1, n_items, dx + dy), batch_size=batch_size)
     bids_input = Input(shape=(n_bidders + 1, n_items), batch_size=batch_size)
@@ -106,13 +106,13 @@ def main():
 
     model = Model(inputs=[representations_input, bids_input], outputs=output)
     model.compile(loss=negative_payment_loss,
-                  optimizer=keras.optimizers.Adam(learning_rate=lr_fn),
+                  optimizer=keras.optimizers.Adam(learning_rate=start_lr),
                   metrics=[payment_metric])
 
-    for epoch in range(epochs):
-        batch_data, bids = generate_values(samples=samples, n_bidders=n_bidders, n_items=n_items, dx=dx, dy=dy)
+    batch_data, bids = generate_values(samples=samples, n_bidders=n_bidders, n_items=n_items, dx=dx, dy=dy)
 
-        model.fit(x=[batch_data, bids], y=tf.zeros(samples), batch_size=batch_size, verbose=1)
+    for epoch in range(epochs):
+        model.fit(x=[batch_data, bids], y=tf.zeros(samples), batch_size=batch_size, verbose=0, callbacks=[TqdmCallback(verbose=0)])
 
     batch_data, bids = generate_values(samples=samples, n_bidders=n_bidders, n_items=n_items, dx=dx, dy=dy)
     loss = model.evaluate([batch_data, bids], y=tf.zeros(samples), batch_size=batch_size)

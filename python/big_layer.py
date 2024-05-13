@@ -130,8 +130,7 @@ class BigLayer(keras.layers.Layer):
         masked_boosts = tf.gather(repeat_boosts, masked_chosen_allocation_indices, axis=2, batch_dims=2)
 
         chosen_allocation_index = tf.tile(tf.expand_dims(chosen_allocation_index, axis=0), [self.n_bidders, 1])
-        regular_boosts = tf.gather(repeat_boosts, chosen_allocation_index, axis=1, batch_dims=1)
-        regular_boosts = tf.squeeze(regular_boosts, axis=2)
+        regular_boosts = tf.gather(repeat_boosts, chosen_allocation_index, axis=2, batch_dims=2)
 
         sum1 = tf.add(masked_expected_welfare, masked_boosts)
         sum2 = []
