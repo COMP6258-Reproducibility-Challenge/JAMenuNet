@@ -3,11 +3,12 @@ import tensorflow as tf
 
 
 class BigLayer(keras.layers.Layer):
-    def __init__(self, softmax_temp, n_bidders, menu_size, batch_size):
+    def __init__(self, softmax_temp, allocation_softmax_temp, n_bidders, menu_size, batch_size):
         super().__init__()
         self.batch_size = batch_size
         self.menu_size = menu_size
         self.softmax_temp = softmax_temp
+        self.allocation_softmax_temp = allocation_softmax_temp
         self.n_bidders = n_bidders + 1
         self.dense1 = keras.layers.Dense(menu_size, activation=keras.activations.relu)
         self.dense2 = keras.layers.Dense(menu_size)
@@ -23,7 +24,7 @@ class BigLayer(keras.layers.Layer):
             stacked_bidders = []
             bidders = tf.unstack(itemInfo, axis=2)
             for bidder in bidders:
-                stacked_bidders.append(tf.math.softmax(tf.multiply(bidder, self.softmax_temp)))
+                stacked_bidders.append(tf.math.softmax(tf.multiply(bidder, self.allocation_softmax_temp)))
             stacked_bidders = tf.stack(stacked_bidders, axis=2)
             stacked_menu.append(stacked_bidders)
 
@@ -123,7 +124,7 @@ class BigLayer(keras.layers.Layer):
             tf.expand_dims(mask, axis=2))
         total_masked_welfare = tf.reduce_sum(masked_welfare, axis=-1)
         masked_chosen_allocation_indices = tf.argmax(
-            tf.multiply(tf.add(total_masked_welfare, repeat_boosts), self.softmax_temp), axis=-1)
+            tf.add(total_masked_welfare, repeat_boosts), axis=-1)
         masked_expected_welfare = tf.gather(total_masked_welfare, masked_chosen_allocation_indices,
                                             axis=2, batch_dims=2)
         masked_boosts = tf.gather(repeat_boosts, masked_chosen_allocation_indices, axis=2, batch_dims=2)
