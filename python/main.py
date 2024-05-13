@@ -9,7 +9,6 @@ from transformer_based_layer import TransformerBasedLayer
 
 
 def negative_payment_loss(y_true, y_pred):
-    tf.print(y_pred)
     return tf.negative(tf.reduce_mean(tf.reduce_sum(y_pred, axis=0), axis=0))
 
 
