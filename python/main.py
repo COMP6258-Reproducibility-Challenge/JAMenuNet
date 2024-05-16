@@ -57,8 +57,8 @@ def main():
     seed = args.seed
 
     start_lr = 1e-8  # This is static in the code
-    end_lr = 3e-6  #3e-4  # lr
-    lr_fn = keras.optimizers.schedules.PolynomialDecay(start_lr, end_lr, 100, power=1.0)
+    end_lr = 3e-4  # lr
+    lr_fn = keras.optimizers.schedules.PolynomialDecay(start_lr, 100, end_lr, power=1.0)
 
     n_bidders = args.n_agents
     n_items = args.m_items  # m_items
@@ -106,13 +106,14 @@ def main():
 
     model = Model(inputs=[representations_input, bids_input], outputs=output)
     model.compile(loss=negative_payment_loss,
-                  optimizer=keras.optimizers.Adam(learning_rate=end_lr),
+                  optimizer=keras.optimizers.Adam(learning_rate=lr_fn),
                   metrics=[payment_metric])
 
-    batch_data, bids = generate_values(samples=samples, n_bidders=n_bidders, n_items=n_items, dx=dx, dy=dy)
+    for epoch in epochs:
+        batch_data, bids = generate_values(samples=samples, n_bidders=n_bidders, n_items=n_items, dx=dx, dy=dy)
 
-    model.fit(x=[batch_data, bids], y=tf.zeros(samples), batch_size=batch_size, epochs=epochs, verbose=0,
-              callbacks=[TqdmCallback(verbose=0)])
+        model.fit(x=[batch_data, bids], y=tf.zeros(samples), batch_size=batch_size, verbose=0,
+                  callbacks=[TqdmCallback(verbose=0)])
 
     batch_data, bids = generate_values(samples=samples, n_bidders=n_bidders, n_items=n_items, dx=dx, dy=dy)
     loss = model.evaluate([batch_data, bids], y=tf.zeros(samples), batch_size=batch_size)
