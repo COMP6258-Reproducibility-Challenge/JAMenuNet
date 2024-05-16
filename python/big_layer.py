@@ -9,7 +9,7 @@ class BigLayer(keras.layers.Layer):
         self.menu_size = menu_size
         self.softmax_temp = softmax_temp
         self.allocation_softmax_temp = allocation_softmax_temp
-        self.n_bidders = n_bidders + 1
+        self.n_bidders = n_bidders
         self.dense1 = keras.layers.Dense(menu_size, activation=keras.activations.relu)
         self.dense2 = keras.layers.Dense(menu_size)
 
@@ -17,25 +17,15 @@ class BigLayer(keras.layers.Layer):
         representations, bids = inputs
         menu, weights, boosts = tf.split(representations, num_or_size_splits=[self.menu_size, 1, self.menu_size],
                                          axis=3)
-        menu = tf.unstack(menu, axis=2)
-        stacked_menu = []
 
-        for itemInfo in menu:
-            stacked_bidders = []
-            bidders = tf.unstack(itemInfo, axis=2)
-            for bidder in bidders:
-                stacked_bidders.append(tf.math.softmax(tf.multiply(bidder, self.allocation_softmax_temp)))
-            stacked_bidders = tf.stack(stacked_bidders, axis=2)
-            stacked_menu.append(stacked_bidders)
-
-        menu = tf.stack(stacked_menu, axis=2)
-        menu = tf.slice(menu, [0, 0, 0, 0], [-1, self.n_bidders, -1, -1])
+        menu = tf.math.softmax(menu * self.allocation_softmax_temp, axis=1)
         menu = tf.transpose(menu, [0, 3, 1, 2])
+        menu = menu[:, :, :-1, :]
 
         if weights.shape.rank == 4:
             weights = tf.squeeze(weights, axis=3)
         weights = tf.sigmoid(tf.reduce_mean(weights, axis=2))
-        weights = tf.slice(weights, [0, 0], [-1, self.n_bidders])
+        weights = weights[:, :-1]
 
         boosts = tf.reduce_mean(boosts, axis=2)
         boosts = tf.reduce_mean(boosts, axis=1)
